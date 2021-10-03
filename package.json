@@ -1,0 +1,17 @@
+{
+  "scripts": {
+    "init": "tsc --init",
+    "build": "tsc",
+    "watch": "tsc -w",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "typescript": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^16.10.2",
+    "@typescript-eslint/eslint-plugin": "^4.32.0",
+    "@typescript-eslint/parser": "^4.32.0",
+    "eslint": "^7.32.0"
+  }
+}
