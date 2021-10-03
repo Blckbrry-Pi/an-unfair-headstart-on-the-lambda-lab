@@ -1,9 +1,8 @@
+import stringToIr from "./frontend_compile";
 import startRepl from "./repl";
 
-import parse from "./parser/full_parser";
-
 function main() {
-    startRepl("λ ", parse);
+    startRepl("λ ", stringToIr);
 }
 
 main();
