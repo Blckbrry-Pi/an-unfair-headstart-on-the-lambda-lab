@@ -1,14 +1,14 @@
-import { ParseError } from "./errors";
-import lexer, { makeLexerPeekable } from "./parser/lexer";
-import LambdaExpression from "./parser/proper_parser";
+import { ParseError } from "../errors";
+import lexer, { makeLexerPeekable } from "./lexer";
+import LambdaExpression from "./proper_parser";
 
-import { Result } from "./result_and_optional";
+import { Result } from "../result_and_optional";
 
 
 type ParserReturnType = LambdaExpression;
 
 
-export default function parse(stringToEval: string): Result<ParserReturnType, Error> {
+export default function parse(stringToEval: string): Result<ParserReturnType, ParseError> {
     const peekableLexer = makeLexerPeekable(lexer(stringToEval));
     try {
         const lambdaExpression = new LambdaExpression(peekableLexer, false);
@@ -20,10 +20,10 @@ export default function parse(stringToEval: string): Result<ParserReturnType, Er
             return Result.Err(new ParseError("`End of String`", next.value, next.value.getSpan()));
         }
     } catch (e) {
-        if (e instanceof Error) {
+        if (e instanceof ParseError) {
             return Result.Err(e);
         } else {
-            return Result.Err(new TypeError("Type thrown in parsing of lambda expression is not an Error."));
+            throw e;
         }
     }
 }
