@@ -16,18 +16,26 @@ type IRVar = BoundVar | UnboundVar;
 export class IRExpr {
     public contents: IRVar | IRAppl | IRFunc;
 
-    constructor(astExpr: LambdaExpression) {
-        let currEvaluator = astExpr;
-        while (currEvaluator.contents instanceof LambdaExpression) currEvaluator = currEvaluator.contents;
-
-        const astContents = currEvaluator.contents;
-        
-        if (typeof astContents === "string") this.contents = {
-            type: "unbound",
-            name: astContents,
-        };
-        else if (astContents instanceof LambdaApplication) this.contents = new IRAppl(astContents);
-        else this.contents = new IRFunc(astContents);
+    constructor(expr: LambdaExpression | IRExpr | IRAppl) {
+        if (expr instanceof LambdaExpression) {
+            let currEvaluator = expr;
+            while (currEvaluator.contents instanceof LambdaExpression) currEvaluator = currEvaluator.contents;
+    
+            const astContents = currEvaluator.contents;
+            
+            if (typeof astContents === "string") this.contents = {
+                type: "unbound",
+                name: astContents,
+            };
+            else if (astContents instanceof LambdaApplication) this.contents = new IRAppl(astContents);
+            else this.contents = new IRFunc(astContents);
+        } else if (expr instanceof IRAppl) {
+            this.contents = expr;
+        } else {
+            if (expr.contents instanceof IRAppl || expr.contents instanceof IRFunc) {
+                this.contents = expr.contents.clone();
+            } else this.contents = expr.contents;
+        }
     }
 
     public bindVars(bindingStacks: Map<string, number[]>, usedIds: Set<number>): void {
@@ -42,10 +50,28 @@ export class IRExpr {
         }
     }
 
-    public toString(bindings: Map<number, string>): string {
+    public toString(bindings: Map<string, number>): string {
         if (this.contents instanceof IRAppl || this.contents instanceof IRFunc) return `(${this.contents.toString(bindings)})`; 
+        else return getVarNameFromBindings(this.contents, bindings);
+    }
 
-        return this.contents.type === "bound" ? this.contents.origName : this.contents.name;
+    public clone(): IRExpr {
+        return new IRExpr(this);
+    }
+
+    public replaceBindings(bindingId: number, expression: IRExpr): void {
+        if (this.contents instanceof IRAppl || this.contents instanceof IRFunc) this.contents.replaceBindings(bindingId, expression);
+        else if (this.contents.type === "bound" && this.contents.bindingIndex === bindingId) this.contents = expression.contents;
+    }
+
+
+    public reserveUnbound(reserved: Map<string, number>): Map<string, number> {
+        if (this.contents instanceof IRAppl || this.contents instanceof IRFunc) return this.contents.reserveUnbound(reserved);
+        else if (this.contents.type === "unbound") {
+            reserved.set(this.contents.name, -1);
+            return reserved;
+        }
+        else return reserved;
     }
 }
 
@@ -53,9 +79,14 @@ export class IRAppl {
     public first: IRExpr;
     public second: IRExpr;
 
-    constructor (astAppl: LambdaApplication) {
-        this.first = new IRExpr(astAppl.first);
-        this.second = new IRExpr(astAppl.second);
+    constructor (appl: LambdaApplication | IRAppl) {
+        if (appl instanceof LambdaApplication) { 
+            this.first = new IRExpr(appl.first);
+            this.second = new IRExpr(appl.second);
+        } else {
+            this.first  = appl.first .clone();
+            this.second = appl.second.clone();
+        }
     }
 
     public bindVars(bindingStacks: Map<string, number[]>, usedIds: Set<number>): void {
@@ -63,22 +94,41 @@ export class IRAppl {
         this.second.bindVars(bindingStacks, usedIds);
     }
 
-    public toString(bindings: Map<number, string>): string {
+    public toString(bindings: Map<string, number>): string {
         return `${this.first.toString(bindings)}${this.second.toString(bindings)}`;
     }
+
+    public clone(): IRAppl {
+        return new IRAppl(this);
+    }
+
+    public replaceBindings(bindingId: number, expression: IRExpr): void {
+        this.first.replaceBindings(bindingId, expression);
+        this.first.replaceBindings(bindingId, expression);
+    }
+
+    public reserveUnbound(reserved: Map<string, number>): Map<string, number> {
+        return this.second.reserveUnbound(this.first.reserveUnbound(reserved));
+    }
+
 }
 
 export class IRFunc {
     public arg: IRVar;
     public body: IRExpr;
 
-    constructor (astFunc: LambdaFunction) {
-        this.arg = {
-            type: "unbound",
-            name: astFunc.varName,
-        };
-
-        this.body = new IRExpr(astFunc.expression);
+    constructor (func: LambdaFunction | IRFunc) {
+        if (func instanceof LambdaFunction) {
+            this.arg = {
+                type: "unbound",
+                name: func.varName,
+            };
+    
+            this.body = new IRExpr(func.expression);
+        } else {
+            this.arg = func.arg;
+            this.body = func.body.clone();
+        }
     }
 
     public bindVars(bindingStacks: Map<string, number[]>, usedIds: Set<number>): void {
@@ -104,16 +154,30 @@ export class IRFunc {
         }
     }
 
-    public toString(bindings: Map<number, string>): string {
+    public toString(bindings: Map<string, number>): string {
         let currArgs = "";
         // eslint-disable-next-line @typescript-eslint/no-this-alias
         let currFunc: IRFunc = this;
-        currArgs += getVarName(this.arg);
+        currArgs += getVarNameFromBindings(this.arg, bindings);
         while (currFunc.body.contents instanceof IRFunc) {
             currFunc = currFunc.body.contents;
-            currArgs += getVarName(currFunc.arg);
+
+            currArgs += getVarNameFromBindings(currFunc.arg, bindings);
         } 
         return `λ${currArgs}.${currFunc.body.toString(bindings)}`;
+    }
+
+    
+    public clone(): IRFunc {
+        return new IRFunc(this);
+    }
+
+    public replaceBindings(bindingId: number, expression: IRExpr): void {
+        this.body.replaceBindings(bindingId, expression);
+    }
+
+    public reserveUnbound(reserved: Map<string, number>): Map<string, number> {
+        return this.body.reserveUnbound(reserved);
     }
 }
 
@@ -144,16 +208,48 @@ export default class IRLine {
 
     public toString(): string {
         if (this.contents === null) return "[empty line]";
-        else if (this.contents instanceof IRExpr) return this.contents.toString(new Map());
-        else return `${this.contents.name} := ${this.contents.expr.toString(new Map())}`;
+        else if (this.contents instanceof IRExpr) {
+            const reservedBindings = this.contents.reserveUnbound(new Map());
+            return this.contents.toString(reservedBindings);
+        }
+        else {
+            const reservedBindings = this.contents.expr.reserveUnbound(new Map());
+            return `${this.contents.name} := ${this.contents.expr.toString(reservedBindings)}`;
+        }
     }
 }
 
-function nextVarName(currentBindings: Map<number, string>) {
+function nextVarName(currentBindings: Map<string, number>) {
     const listOfChars = "abcdefghijklmnopqrstuvwxyzαβγδεζηθικμνξρςστυφχψωABCDEFGHIJKLMNOPQRSTUVWXYZΑΓΔΘΛΞΠΣΦΨΩΪΫάέήίΰⓐⓑⓒⓓⓔⓕⓖⓗⓘⓙⓚⓛⓜⓝⓞⓟⓠⓡⓢⓣⓤⓥⓦⓧⓨⓩⒶⒷⒸⒹⒺⒻⒼⒽⒾⒿⓀⓁⓂⓃⓄⓅⓆⓇⓈⓉⓊⓋⓌⓍⓎⓏàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞß";
     let index = -1; 
-    Array.from(currentBindings.entries()).forEach(([, varName]) => index = Math.max(index, listOfChars.indexOf(varName)));
+    Array.from(currentBindings.entries()).forEach(([varName]) => index = Math.max(index, listOfChars.indexOf(varName)));
     return listOfChars.charAt(index + 1);
+}
+
+function nameFromBindingId(bindings: Map<string, number>, bindingId: number): string | undefined {
+    for (const [name, id] of bindings) if (id === bindingId) return name;
+}
+
+function getVarNameFromBindings(variable: IRVar, bindings: Map<string, number>): string {
+    if (variable.type === "unbound") return variable.name;
+    else {
+        if (bindings === undefined) throw Error("What the heck");
+        const boundToOrigName = bindings.get(variable.origName);
+        if (boundToOrigName === variable.bindingIndex) return variable.origName;
+        else if (boundToOrigName === undefined) {
+            bindings.set(variable.origName, variable.bindingIndex);
+            return variable.origName;
+        } else {
+            const name = nameFromBindingId(bindings, variable.bindingIndex);
+            if (name === undefined) {
+                const newName = nextVarName(bindings);
+                bindings.set(newName, variable.bindingIndex);
+                return newName;
+            } else {
+                return name;
+            }
+        }
+    }
 }
 
 function getVarName(variable: IRVar): string {
