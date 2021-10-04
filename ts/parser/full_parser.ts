@@ -1,19 +1,21 @@
 import { ParseError } from "../errors";
 import lexer, { makeLexerPeekable } from "./lexer";
-import LambdaExpression from "./proper_parser";
+import LambdaLine from "./proper_parser";
 
 import { Result } from "../result_and_optional";
 
 
-type ParserReturnType = LambdaExpression;
+type ParserReturnType = LambdaLine;
 
 
 export default function parse(stringToEval: string): Result<ParserReturnType, ParseError> {
-    const peekableLexer = makeLexerPeekable(lexer(stringToEval));
+    const peekableLexer1 = makeLexerPeekable(lexer(stringToEval));
+    const peekableLexer2 = makeLexerPeekable(lexer(stringToEval));
+    
     try {
-        const lambdaExpression = new LambdaExpression(peekableLexer, false);
+        const lambdaExpression = new LambdaLine(peekableLexer1, peekableLexer2);
 
-        const next = peekableLexer.next();
+        const next = peekableLexer2.next();
         if (next.done) {
             return Result.Ok(lambdaExpression);
         } else {

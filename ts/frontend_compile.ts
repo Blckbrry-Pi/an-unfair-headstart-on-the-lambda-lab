@@ -1,15 +1,13 @@
-import IRExpr from "./ir/ir";
+import IRLine from "./ir/ir";
 
 import { Result } from "./result_and_optional";
 import { ParseError } from "./errors";
 import parse from "./parser/full_parser";
 
-export default function stringToIr(input: string): Result<IRExpr, ParseError> {
+export default function stringToIr(input: string): Result<IRLine, ParseError> {
     const result = parse(input);
     if (result.isOk()) {
-        const ir = new IRExpr(result.unwrap());
-        ir.bindVars(new Map(), new Set());
-        return Result.Ok(ir);
+        return Result.Ok(new IRLine(result.unwrap()));
     } else {
         return Result.Err(result.unwrapErr());
     }

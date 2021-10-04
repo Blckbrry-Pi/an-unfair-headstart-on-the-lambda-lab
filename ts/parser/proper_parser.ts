@@ -85,7 +85,7 @@ export class LambdaFunction {
 }
 
 
-export default class LambdaExpression {
+export class LambdaExpression {
     public contents: string | LambdaFunction | LambdaApplication | LambdaExpression;
 
     constructor(lxrOrExprOrFuncOrString: LexerType | LambdaExpression | LambdaFunction | string, inParens: boolean) {
@@ -196,5 +196,64 @@ export default class LambdaExpression {
                 }
             }
         }
+    }
+}
+
+interface Assignment {
+    varName: string;
+    expression: LambdaExpression;
+}
+
+type Line = LambdaExpression | Assignment | null;
+
+export default class LambdaLine {
+    public contents: Line;
+
+    constructor(lxr1: LexerType, lxr2: LexerType) {
+        const next = lxr1.next();
+
+        if (next.done) {
+            this.contents = null;
+            return;
+        }
+        const token = next.value;
+
+        switch (token.getTokenType()) {
+        case "assignment":
+        case "dot":
+        case "lambda":
+        case "paren":
+            this.contents = new LambdaExpression(lxr2, false);
+            break;
+
+        case "var": {
+            const next = lxr1.next();
+            if (next.done) {
+                this.contents = new LambdaExpression(lxr2, false);
+                break;
+            }
+            const token2 = next.value;
+
+            switch (token2.getTokenType()) {
+            case "dot":
+            case "lambda":
+            case "paren":
+            case "var":
+                this.contents = new LambdaExpression(lxr2, false);
+                break;
+            
+            case "assignment":
+                lxr2.next();
+                lxr2.next();
+                this.contents = {
+                    varName: token.getVarName().unwrap(),
+                    expression: new LambdaExpression(lxr2, false),
+                };
+            }
+        }
+
+
+        }
+
     }
 }

@@ -25,7 +25,7 @@ export default function startRepl<R extends Result<unknown, Error>>(prompt: stri
                 else callback(new ErrorWithContext(errorValue as Err<R>, command, fileName));
             }
         },
-        writer: (input) => input instanceof ErrorWithContext ? formatError(input) : inspect(input, true, Infinity, true),
+        writer: (input) => input instanceof ErrorWithContext ? formatError(input) : `${inspect(input, true, Infinity, true)}\n${input.toString()}`,
         preview: false,
     });
 }
